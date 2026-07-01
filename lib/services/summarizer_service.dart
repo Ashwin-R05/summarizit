@@ -1,7 +1,20 @@
-/// Extractive text summarization engine.
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Extractive text summarization engine and Generative AI wrapper.
 /// Scores sentences by word frequency (excluding stopwords) and returns
-/// the top 3–5 most important sentences as bullet points.
+/// the top 3–5 most important sentences as bullet points, or uses Gemini API.
 class SummarizerService {
+  final SharedPreferences? prefs;
+
+  SummarizerService({this.prefs});
+
+  /// Check if AI is configured and enabled.
+  bool get isAiEnabled {
+    final apiKey = prefs?.getString('gemini_api_key');
+    final useAi = prefs?.getBool('use_ai_summarization') ?? false;
+    return apiKey != null && apiKey.isNotEmpty && useAi;
+  }
   /// English stopwords to ignore when scoring.
   static const Set<String> _stopwords = {
     'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you',
@@ -47,6 +60,35 @@ class SummarizerService {
         .split(RegExp(r'[^a-z]+'))
         .where((w) => w.length > 2 && !_stopwords.contains(w))
         .toList();
+  }
+
+  /// Summarize [text] asynchronously. Returns AI summary if enabled,
+  /// otherwise falls back to extractive summarization.
+  Future<List<String>> summarizeAsync(String text, {int bulletCount = 5}) async {
+    if (isAiEnabled) {
+      try {
+        final apiKey = prefs!.getString('gemini_api_key')!;
+        final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: apiKey);
+
+        final prompt = 'Summarize the following text into exactly $bulletCount concise bullet points. '
+            'Only output the bullet points, starting each with a hyphen. Do not include introductory text.\n\n$text';
+
+        final response = await model.generateContent([Content.text(prompt)]);
+
+        if (response.text != null) {
+          // Parse the hyphenated list into a string array
+          return response.text!
+              .split('\n')
+              .map((line) => line.trim())
+              .where((line) => line.startsWith('-'))
+              .map((line) => line.substring(1).trim()) // Remove hyphen
+              .toList();
+        }
+      } catch (e) {
+        // Fall back to extractive summarization on error
+      }
+    }
+    return summarize(text, bulletCount: bulletCount);
   }
 
   /// Summarize [text] into [bulletCount] key sentences (default 3–5).

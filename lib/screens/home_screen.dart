@@ -1,15 +1,19 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:summarizit/services/summarizer_service.dart';
 import 'package:summarizit/services/file_export_service.dart';
+import 'package:summarizit/services/document_scanner_service.dart';
 import 'package:summarizit/theme/theme_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:summarizit/widgets/gradient_button.dart';
 import 'package:summarizit/widgets/summary_card.dart';
 
 class HomeScreen extends StatefulWidget {
   final ThemeProvider themeProvider;
+  final SharedPreferences prefs;
 
-  const HomeScreen({super.key, required this.themeProvider});
+  const HomeScreen({super.key, required this.themeProvider, required this.prefs});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -17,8 +21,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
-  final SummarizerService _summarizer = SummarizerService();
+  late SummarizerService _summarizer;
   final FileExportService _fileExport = FileExportService();
+  final DocumentScannerService _scannerService = DocumentScannerService();
   final ScrollController _scrollController = ScrollController();
 
   List<String> _bullets = [];
@@ -36,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _summarizer = SummarizerService(prefs: widget.prefs);
     _resultAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -68,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _scrollController.dispose();
     _resultAnimController.dispose();
     _orbController.dispose();
+    _scannerService.dispose();
     super.dispose();
   }
 
@@ -99,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     await Future.delayed(const Duration(milliseconds: 900));
 
-    final result = _summarizer.summarize(text);
+    final result = await _summarizer.summarizeAsync(text);
     if (!mounted) return;
 
     setState(() {
@@ -118,6 +125,64 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         );
       }
     });
+  }
+
+  void _showSettingsDialog() {
+    final apiKeyController = TextEditingController(text: widget.prefs.getString('gemini_api_key') ?? '');
+    bool useAi = widget.prefs.getBool('use_ai_summarization') ?? false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.cardOverlay(_isDark),
+              title: Text('Settings', style: TextStyle(color: AppColors.text(_isDark))),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    title: Text('Use AI Summarization', style: TextStyle(color: AppColors.text(_isDark))),
+                    value: useAi,
+                    onChanged: (val) {
+                      setDialogState(() {
+                        useAi = val;
+                      });
+                    },
+                  ),
+                  if (useAi)
+                    TextField(
+                      controller: apiKeyController,
+                      style: TextStyle(color: AppColors.text(_isDark)),
+                      decoration: InputDecoration(
+                        labelText: 'Gemini API Key',
+                        labelStyle: TextStyle(color: AppColors.textSecondary(_isDark)),
+                        hintText: 'Enter your API key',
+                        hintStyle: TextStyle(color: AppColors.textSecondary(_isDark).withValues(alpha: 0.5)),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary(_isDark))),
+                ),
+                TextButton(
+                  onPressed: () {
+                    widget.prefs.setString('gemini_api_key', apiKeyController.text);
+                    widget.prefs.setBool('use_ai_summarization', useAi);
+                    Navigator.pop(context);
+                  },
+                  child: Text('Save', style: TextStyle(color: AppColors.primaryPurple)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showSnack(String msg) {
@@ -233,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── Top bar (theme toggle) ──
+  // ── Top bar (theme toggle & settings) ──
   Widget _buildTopBar(bool dark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -244,21 +309,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.border(dark)),
           ),
-          child: IconButton(
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              transitionBuilder: (child, anim) =>
-                  RotationTransition(turns: anim, child: child),
-              child: Icon(
-                dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                key: ValueKey(dark),
-                color: dark ? AppColors.accentOrange : AppColors.primaryPurple,
-                size: 22,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.settings,
+                  color: AppColors.textSecondary(dark),
+                  size: 22,
+                ),
+                onPressed: _showSettingsDialog,
               ),
-            ),
-            onPressed: () {
-              widget.themeProvider.toggleTheme();
-            },
+              Container(
+                width: 1,
+                height: 24,
+                color: AppColors.border(dark),
+              ),
+              IconButton(
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  transitionBuilder: (child, anim) =>
+                      RotationTransition(turns: anim, child: child),
+                  child: Icon(
+                    dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    key: ValueKey(dark),
+                    color: dark ? AppColors.accentOrange : AppColors.primaryPurple,
+                    size: 22,
+                  ),
+                ),
+                onPressed: () {
+                  widget.themeProvider.toggleTheme();
+                },
+              ),
+            ],
           ),
         ),
       ],
@@ -453,6 +536,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   dark,
                 ),
                 const Spacer(),
+
+                // Add File/Image Upload buttons
+                IconButton(
+                  icon: Icon(Icons.image, color: AppColors.textSecondary(dark), size: 20),
+                  onPressed: () async {
+                     final text = await _scannerService.pickAndExtractTextFromImage(ImageSource.gallery);
+                     if (text != null && text.isNotEmpty) {
+                       setState(() {
+                         _textController.text += "\n$text";
+                       });
+                     } else {
+                        _showSnack("No text recognized or action cancelled.");
+                     }
+                  },
+                  tooltip: 'Upload Image (OCR)',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: Icon(Icons.file_upload, color: AppColors.textSecondary(dark), size: 20),
+                  onPressed: () async {
+                     final text = await _scannerService.pickAndExtractTextFromFile();
+                     if (text != null && text.isNotEmpty) {
+                       setState(() {
+                         _textController.text += "\n$text";
+                       });
+                     } else {
+                        _showSnack("Could not read file or action cancelled.");
+                     }
+                  },
+                  tooltip: 'Upload Text File',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 12),
+
                 // Min requirement indicator
                 if (_wordCount > 0 && _wordCount < 30)
                   Container(
