@@ -36,6 +36,11 @@ dependencies:
   path_provider: ^2.1.5
   share_plus: ^10.1.4
   archive: ^4.0.2
+  google_generative_ai: ^0.4.7
+  file_picker: ^11.0.2
+  image_picker: ^1.2.3
+  google_mlkit_text_recognition: ^0.15.1
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

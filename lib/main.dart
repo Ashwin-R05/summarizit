@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:summarizit/screens/home_screen.dart';
 import 'package:summarizit/theme/theme_provider.dart';
 
-void main() {
-  runApp(const SummarizItApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  runApp(SummarizItApp(prefs: prefs));
 }
 
 class SummarizItApp extends StatefulWidget {
-  const SummarizItApp({super.key});
+  final SharedPreferences prefs;
+
+  const SummarizItApp({super.key, required this.prefs});
 
   @override
   State<SummarizItApp> createState() => _SummarizItAppState();
@@ -61,7 +66,7 @@ class _SummarizItAppState extends State<SummarizItApp> {
         useMaterial3: true,
       ),
 
-      home: HomeScreen(themeProvider: themeProvider),
+      home: HomeScreen(themeProvider: themeProvider, prefs: widget.prefs),
     );
   }
 }
