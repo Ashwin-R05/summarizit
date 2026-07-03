@@ -4,7 +4,7 @@ SummarizIt is a feature-rich, high-performance Flutter application designed to e
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 | Feature | Description | Engine / Packages | Offline |
 | :--- | :--- | :--- | :---: |
@@ -17,7 +17,7 @@ SummarizIt is a feature-rich, high-performance Flutter application designed to e
 
 ---
 
-## 📂 Project Architecture
+## Project Architecture
 
 The codebase follows clean architecture principles, separating user interface layers, custom UI components, application logic services, and design styles:
 
@@ -41,7 +41,7 @@ lib/
 
 ---
 
-## 🧠 Technical Mechanics
+## Technical Mechanics
 
 ### 1. Offline Extractive Summarization Algorithm
 When operating offline or when AI is disabled, the system scores and extracts sentences using a word-frequency-based ranking:
@@ -66,7 +66,7 @@ To export summaries to Microsoft Word without external heavy native libraries, t
 
 ---
 
-## ⚙️ Getting Started
+##  Getting Started
 
 ### Prerequisites
 * [Flutter SDK](https://docs.flutter.dev/get-started/install) (`^3.11.0` or higher)
@@ -96,7 +96,7 @@ To export summaries to Microsoft Word without external heavy native libraries, t
 
 ---
 
-## 🧪 Testing
+## Testing
 
 The codebase includes widget testing to verify building and core dependencies. Run tests via the command line:
 
@@ -112,7 +112,7 @@ flutter analyze
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please follow these guidelines:
 1. Fork the repository.
