@@ -1,13 +1,5 @@
 # SummarizIt
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Flutter-%2302569B.svg?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter" />
-  <img src="https://img.shields.io/badge/Dart-%230175C2.svg?style=for-the-badge&logo=dart&logoColor=white" alt="Dart" />
-  <img src="https://img.shields.io/badge/Google%20ML%20Kit-34A853?style=for-the-badge&logo=google&logoColor=white" alt="Google ML Kit" />
-  <img src="https://img.shields.io/badge/Gemini%20AI-8E44AD?style=for-the-badge&logo=google-gemini&logoColor=white" alt="Gemini AI" />
-  <img src="https://img.shields.io/badge/License-MIT-4CAF50?style=for-the-badge" alt="License" />
-</p>
-
 SummarizIt is a feature-rich, high-performance Flutter application designed to extract and generate clean, structured bullet-point summaries from long texts, document images, and files. By combining **offline, frequency-based extractive algorithms** with **advanced Generative AI (Google Gemini)**, SummarizIt offers a dual-mode hybrid architecture tailored for both low-connectivity utility and high-intelligence synthesis.
 
 ---
@@ -130,8 +122,3 @@ Contributions are welcome! Please follow these guidelines:
 5. Push to the branch (`git push origin feature/AmazingFeature`).
 6. Open a Pull Request.
 
----
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details (or feel free to use it as-is for educational purposes).
