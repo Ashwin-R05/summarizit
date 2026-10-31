@@ -1,124 +1,125 @@
 # SummarizIt
 
-SummarizIt is a feature-rich, high-performance Flutter application designed to extract and generate clean, structured bullet-point summaries from long texts, document images, and files. By combining **offline, frequency-based extractive algorithms** with **advanced Generative AI (Google Gemini)**, SummarizIt offers a dual-mode hybrid architecture tailored for both low-connectivity utility and high-intelligence synthesis.
+SummarizIt is a Flutter application that summarizes text from direct input, imported text files, or scanned document images. It uses a hybrid approach: an on-device extractive summarizer for offline operation and the Google Gemini API for abstractive, bullet-point generation when online.
 
 ---
 
-## Key Features
+## How the Hybrid Summarizer Works
 
-| Feature | Description | Engine / Packages | Offline |
-| :--- | :--- | :--- | :---: |
-| **Offline Extractive Summarization** | Instantly extracts key sentences by scoring term frequency-inverse sentence length. | Local Dart Engine | Yes |
-| **Generative AI Summarization** | Produces natural-language, context-aware abstractive summaries using Google's Gemini models. | `google_generative_ai` | No |
-| **Document Scanning (OCR)** | Take photos or upload images to scan and extract printed text. | `google_mlkit_text_recognition`, `image_picker` | Yes |
-| **Text File Import** | Select and import contents of plain text `.txt` files directly into the editor. | `file_picker` | Yes |
-| **Microsoft Word Export** | Shares summaries as custom-packaged, standard Microsoft Word `.docx` documents. | `archive` (Zip Open XML) | Yes |
-| **Adaptive Styling** | Dark & Light glassmorphic design featuring custom smooth gradient animations. | `google_fonts` (Outfit) | Yes |
+SummarizIt offers two summarization modes depending on user settings and network availability:
+
+1. **Offline Extractive Summarization (On-Device)**
+   - **Tokenization:** Breaks the input text into sentences using punctuation boundaries (`.`, `!`, `?`) and filters out fragments shorter than 15 characters.
+   - **Stopword Removal:** Filters out common English functional words (e.g., *the*, *and*, *because*, *with*) to isolate content keywords.
+   - **Frequency Scoring:** Builds a normalized word frequency table. Each sentence is scored by summing the normalized frequencies of its constituent words divided by its word count, preventing bias toward overly long sentences.
+   - **Chronological Ordering & Bounding:** Dynamically selects between 3 and 5 top-scoring sentences (depending on document length) and sorts them back into their original narrative order.
+
+2. **Generative AI Summarization (Google Gemini)**
+   - When enabled, the app sends prompts to Google's official `gemini-3.8-flash` model requesting concise, hyphen-prefixed bullet points.
+   - API keys are stored in encrypted device storage (`flutter_secure_storage`) rather than plaintext preferences, and requests have a 30-second timeout.
+
+3. **Handling Long Inputs (Map-Reduce Chunking)**
+   - When text exceeds the single-request threshold (4,000 characters), the app splits the document along sentence boundaries into chunks.
+   - **Map Phase:** Each chunk is summarized individually into intermediate key points.
+   - **Reduce Phase:** All intermediate summaries are combined and submitted in a final prompt to synthesize the requested number of cohesive bullet points.
+
+4. **Fallback and Failure Transparency**
+   - If the Gemini request fails, times out, or encounters network issues, the service automatically falls back to the on-device extractive summarizer.
+   - Unlike silent fallbacks, the UI immediately alerts the user with a notification (`AI unavailable, used offline summary`) so errors are never hidden.
+
+---
+
+## Platform Support
+
+| Feature | Android | iOS | Web | Desktop (macOS / Linux / Windows) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Offline Extractive Summarizer** | Yes | Yes | Yes | Yes |
+| **Gemini AI Summarizer** | Yes | Yes | Yes | Yes |
+| **Text File Import (`.txt`)** | Yes | Yes | Yes | Yes |
+| **Word Export (`.docx`) & Sharing** | Yes | Yes | Partial (Download) | Yes |
+| **Document Scanning (OCR)** | Yes | Yes | **No** (ML Kit requires Android/iOS) | No |
+| **Secure API Key Storage** | Yes (Keystore) | Yes (Keychain) | Yes (Web Storage) | Yes (Keyring / Credential Manager) |
+
+---
+
+## Limitations
+
+- **OCR Environment:** Document scanning and optical character recognition rely on Google ML Kit, which is restricted to mobile platforms (Android and iOS). It is not supported on web or desktop.
+- **Language Optimization:** The offline extractive engine's stopword dictionary is currently tailored to English text. Non-English text will be scored on raw word frequencies without stopword filtering.
+- **Extractive Nature of Offline Engine:** Offline summaries select existing sentences verbatim from the document rather than paraphrasing or synthesizing new sentences.
+- **Network Dependency for AI:** Generative summaries require an active internet connection and a valid Google Gemini API key.
 
 ---
 
 ## Project Architecture
 
-The codebase follows clean architecture principles, separating user interface layers, custom UI components, application logic services, and design styles:
+The project uses a layered directory structure separating screens, background services, UI widgets, and utilities:
 
 ```text
 lib/
-├── main.dart                          # App entry point & global ThemeData configurations
+├── main.dart                          # Application entry point & theme initialization
 ├── screens/
-│   └── home_screen.dart               # Core viewport UI, input forms, setting controllers & custom animations
+│   └── home_screen.dart               # Main UI view: text editor, action triggers, settings modal
 ├── services/
-│   ├── document_scanner_service.dart     # Camera/Gallery image picker and Google ML Kit OCR service
-│   ├── file_export_service.dart          # Assembler for Plain Text and Open XML (.docx) export packages
-│   └── summarizer_service.dart        # Hybrid engine (Local extractive summarizer & Gemini API adapter)
+│   ├── document_scanner_service.dart  # Camera/Gallery image picker and ML Kit OCR wrapper
+│   ├── file_export_service.dart       # Formats and packages Plain Text and DOCX (ZIP Open XML) files
+│   └── summarizer_service.dart        # Hybrid engine: offline scoring, Gemini client, chunking & fallback
 ├── theme/
-│   └── theme_provider.dart            # Centralized ThemeMode listeners, palettes, and dynamic colour mappings
+│   └── theme_provider.dart            # Light and dark theme palettes and ThemeMode management
 ├── utils/
-│   └── constants.dart                 # App-wide static configuration values
+│   └── constants.dart                 # Centralized constants: model name, timeouts, storage keys, prompts
 └── widgets/
-    ├── gradient_button.dart           # Custom, interactive gradient button with tactile micro-interactions
-    └── summary_card.dart              # Container widget featuring animated entrants for bullet summaries
+    ├── gradient_button.dart           # Custom action button with tactile press feedback
+    └── summary_card.dart              # Animated summary display card with copy and export controls
 ```
 
 ---
 
-## Technical Mechanics
-
-### 1. Offline Extractive Summarization Algorithm
-When operating offline or when AI is disabled, the system scores and extracts sentences using a word-frequency-based ranking:
-* **Tokenization:** Splits input text into sentences using regex boundary lookbehinds (`(?<=[.!?])\s+`) and filters out short sentence fragments (less than 15 characters).
-* **Stopword Removal:** Eliminates common English stopwords (e.g., *the*, *and*, *because*, *myself*) to avoid scoring functional grammar.
-* **Word Frequency Mapping:** Tracks raw frequencies of remaining words, normalizing them by the highest frequency in the document:
-  $$\text{Normalized Frequency}(w) = \frac{\text{Frequency}(w)}{\text{Max Frequency}}$$
-* **Sentence Scoring:** Scores each sentence by summing the normalized frequencies of its constituent words, then divides by the word count of the sentence to eliminate bias toward longer sentences:
-  $$\text{Score}(S) = \frac{\sum_{w \in S} \text{Normalized Frequency}(w)}{\text{Word Count}(S)}$$
-* **Ordering:** Extracts the top $N$ highest-scoring sentences (dynamically bounded between 3 and 5 based on document length) and preserves their original chronological ordering to retain narrative flow.
-
-### 2. Generative AI Engine (Gemini)
-When AI is configured and enabled, SummarizIt connects to the `gemini-1.5-flash` model:
-* Sends a structured instruction to output exactly $N$ bullet points starting with a hyphen.
-* Falls back gracefully to the offline extractive summarizer if the API call fails or encounters invalid keys.
-
-### 3. Open XML (.docx) Generation
-To export summaries to Microsoft Word without external heavy native libraries, the app compiles the paragraphs into standard Office Open XML (OOXML) documents in memory:
-1. Generates core document specifications (`document.xml`), relationships (`document.xml.rels`), numbering rules (`numbering.xml`), and content declarations (`[Content_Types].xml`).
-2. Wraps and compresses the output directory structure into a standard ZIP folder using the Dart `archive` package.
-3. Automatically triggers native platform share dialogs to save or send the generated binary document.
-
----
-
-##  Getting Started
+## Getting Started
 
 ### Prerequisites
-* [Flutter SDK](https://docs.flutter.dev/get-started/install) (`^3.11.0` or higher)
-* [Dart SDK](https://dart.dev/get-started) (`^3.0.0` or higher)
-* A mobile device or emulator (necessary for OCR/ML Kit support; OCR does not run on web environments)
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) (`^3.11.0` or higher)
+- [Dart SDK](https://dart.dev/get-started) (`^3.0.0` or higher)
+- Android Studio / Xcode (for mobile development and camera/OCR testing)
 
 ### Installation & Run
+
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/summarizit.git
+   git clone https://github.com/Ashwin-R05/summarizit.git
    cd summarizit
    ```
-2. Pull application dependencies:
+
+2. Install dependencies:
    ```bash
    flutter pub get
    ```
-3. Run the project in development mode:
+
+3. Run the application:
    ```bash
    flutter run
    ```
 
-### Configuring Generative AI (Gemini)
-1. Generate an API Key in the [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Launch the app and tap the **Settings (Gear) icon** in the top-right corner.
-3. Enable the **Use AI Summarization** toggle.
-4. Input your Gemini API key and tap **Save**. The configuration is securely persisted offline using SharedPreferences.
+### Configuring the Gemini API Key
+
+1. Obtain a free API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. In SummarizIt, open the **Settings** dialog via the gear icon in the top app bar.
+3. Toggle **Use AI Summarization** on.
+4. Paste your Gemini API key and tap **Save**. The key is stored in hardware-backed secure storage via `flutter_secure_storage`.
 
 ---
 
-## Testing
+## Testing & CI
 
-The codebase includes widget testing to verify building and core dependencies. Run tests via the command line:
+Unit and widget tests cover the extractive summarization engine, stopword filtering, scoring bounds, chronological order, long text chunking, Gemini mock fallback, and DOCX ZIP package generation:
 
 ```bash
+# Run unit and widget tests
 flutter test
-```
 
-To run a static analysis check and ensure proper formatting compliance:
-
-```bash
+# Run static analysis
 flutter analyze
 ```
 
----
-
-## Contributing
-
-Contributions are welcome! Please follow these guidelines:
-1. Fork the repository.
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Ensure all unit and widget tests pass.
-5. Push to the branch (`git push origin feature/AmazingFeature`).
-6. Open a Pull Request.
-
+A continuous integration pipeline is configured via GitHub Actions (`.github/workflows/dart.yml`) to automatically run `flutter analyze` and `flutter test` on every push and pull request.
