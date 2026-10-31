@@ -5,6 +5,7 @@ import 'package:summarizit/services/summarizer_service.dart';
 import 'package:summarizit/services/file_export_service.dart';
 import 'package:summarizit/services/document_scanner_service.dart';
 import 'package:summarizit/theme/theme_provider.dart';
+import 'package:summarizit/utils/constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:summarizit/widgets/gradient_button.dart';
 import 'package:summarizit/widgets/summary_card.dart';
@@ -109,8 +110,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final result = await _summarizer.summarizeAsync(text);
     if (!mounted) return;
 
+    if (result.notice != null) {
+      _showSnack(result.notice!);
+    }
+
     setState(() {
-      _bullets = result;
+      _bullets = result.bullets;
       _isLoading = false;
       _showResult = true;
     });
@@ -128,8 +133,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _showSettingsDialog() {
-    final apiKeyController = TextEditingController(text: widget.prefs.getString('gemini_api_key') ?? '');
-    bool useAi = widget.prefs.getBool('use_ai_summarization') ?? false;
+    final apiKeyController = TextEditingController(
+      text: widget.prefs.getString(AppConstants.keyGeminiApiKey) ?? '',
+    );
+    bool useAi = widget.prefs.getBool(AppConstants.keyUseAiSummarization) ?? false;
 
     showDialog(
       context: context,
@@ -171,8 +178,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
                 TextButton(
                   onPressed: () {
-                    widget.prefs.setString('gemini_api_key', apiKeyController.text);
-                    widget.prefs.setBool('use_ai_summarization', useAi);
+                    widget.prefs.setString(AppConstants.keyGeminiApiKey, apiKeyController.text);
+                    widget.prefs.setBool(AppConstants.keyUseAiSummarization, useAi);
                     Navigator.pop(context);
                   },
                   child: Text('Save', style: TextStyle(color: AppColors.primaryPurple)),

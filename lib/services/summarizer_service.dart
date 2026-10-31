@@ -1,5 +1,25 @@
+import 'dart:async';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:summarizit/utils/constants.dart';
+
+/// Represents the outcome of a summarization request.
+class SummaryResult {
+  /// The extracted or generated bullet points.
+  final List<String> bullets;
+
+  /// Whether the result fell back to the offline extractive summarizer.
+  final bool usedFallback;
+
+  /// A descriptive message if a fallback occurred.
+  final String? notice;
+
+  const SummaryResult({
+    required this.bullets,
+    this.usedFallback = false,
+    this.notice,
+  });
+}
 
 /// Extractive text summarization engine and Generative AI wrapper.
 /// Scores sentences by word frequency (excluding stopwords) and returns
@@ -11,8 +31,8 @@ class SummarizerService {
 
   /// Check if AI is configured and enabled.
   bool get isAiEnabled {
-    final apiKey = prefs?.getString('gemini_api_key');
-    final useAi = prefs?.getBool('use_ai_summarization') ?? false;
+    final apiKey = prefs?.getString(AppConstants.keyGeminiApiKey);
+    final useAi = prefs?.getBool(AppConstants.keyUseAiSummarization) ?? false;
     return apiKey != null && apiKey.isNotEmpty && useAi;
   }
   /// English stopwords to ignore when scoring.
@@ -64,35 +84,64 @@ class SummarizerService {
 
   /// Summarize [text] asynchronously. Returns AI summary if enabled,
   /// otherwise falls back to extractive summarization.
-  Future<List<String>> summarizeAsync(String text, {int bulletCount = 5}) async {
+  Future<SummaryResult> summarizeAsync(
+    String text, {
+    int bulletCount = AppConstants.defaultBulletCount,
+  }) async {
     if (isAiEnabled) {
       try {
-        final apiKey = prefs!.getString('gemini_api_key')!;
-        final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: apiKey);
+        final apiKey = prefs!.getString(AppConstants.keyGeminiApiKey)!;
+        final model = GenerativeModel(
+          model: AppConstants.geminiModel,
+          apiKey: apiKey,
+        );
 
-        final prompt = 'Summarize the following text into exactly $bulletCount concise bullet points. '
+        final prompt =
+            'Summarize the following text into exactly $bulletCount concise bullet points. '
             'Only output the bullet points, starting each with a hyphen. Do not include introductory text.\n\n$text';
 
-        final response = await model.generateContent([Content.text(prompt)]);
+        final response = await model
+            .generateContent([Content.text(prompt)])
+            .timeout(AppConstants.geminiTimeout);
 
-        if (response.text != null) {
+        if (response.text != null && response.text!.trim().isNotEmpty) {
           // Parse the hyphenated list into a string array
-          return response.text!
+          final bullets = response.text!
               .split('\n')
               .map((line) => line.trim())
               .where((line) => line.startsWith('-'))
               .map((line) => line.substring(1).trim()) // Remove hyphen
+              .where((line) => line.isNotEmpty)
               .toList();
+
+          if (bullets.isNotEmpty) {
+            return SummaryResult(bullets: bullets, usedFallback: false);
+          }
         }
+
+        // Empty response from AI: fallback to offline extractive summary
+        return SummaryResult(
+          bullets: summarize(text, bulletCount: bulletCount),
+          usedFallback: true,
+          notice: AppConstants.fallbackNotice,
+        );
       } catch (e) {
-        // Fall back to extractive summarization on error
+        // Fall back to extractive summarization on error or timeout
+        return SummaryResult(
+          bullets: summarize(text, bulletCount: bulletCount),
+          usedFallback: true,
+          notice: AppConstants.fallbackNotice,
+        );
       }
     }
-    return summarize(text, bulletCount: bulletCount);
+    return SummaryResult(
+      bullets: summarize(text, bulletCount: bulletCount),
+      usedFallback: false,
+    );
   }
 
   /// Summarize [text] into [bulletCount] key sentences (default 3–5).
-  List<String> summarize(String text, {int bulletCount = 5}) {
+  List<String> summarize(String text, {int bulletCount = AppConstants.defaultBulletCount}) {
     final sentences = _tokenizeSentences(text);
     if (sentences.isEmpty) return [];
 
