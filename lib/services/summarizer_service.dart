@@ -82,8 +82,61 @@ class SummarizerService {
         .toList();
   }
 
+  /// Parses bullet lines from raw model output into trimmed strings.
+  List<String> _parseBullets(String rawText) {
+    return rawText
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.startsWith('-') || line.startsWith('•') || line.startsWith('*'))
+        .map((line) => line.replaceFirst(RegExp(r'^[-•*]\s*'), '').trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+  }
+
+  /// Splits long input text into manageable chunks along sentence boundaries.
+  List<String> _chunkText(String text, {int maxChunkLength = AppConstants.maxChunkCharLength}) {
+    if (text.length <= maxChunkLength) return [text];
+
+    final sentences = _tokenizeSentences(text);
+    if (sentences.isEmpty) {
+      final chunks = <String>[];
+      for (int i = 0; i < text.length; i += maxChunkLength) {
+        final end = (i + maxChunkLength < text.length) ? i + maxChunkLength : text.length;
+        chunks.add(text.substring(i, end));
+      }
+      return chunks;
+    }
+
+    final chunks = <String>[];
+    final currentChunk = StringBuffer();
+
+    for (final sentence in sentences) {
+      if (currentChunk.length + sentence.length + 1 > maxChunkLength && currentChunk.isNotEmpty) {
+        chunks.add(currentChunk.toString().trim());
+        currentChunk.clear();
+      }
+      if (currentChunk.isNotEmpty) {
+        currentChunk.write(' ');
+      }
+      currentChunk.write(sentence);
+    }
+
+    if (currentChunk.isNotEmpty) {
+      chunks.add(currentChunk.toString().trim());
+    }
+
+    return chunks;
+  }
+
   /// Summarize [text] asynchronously. Returns AI summary if enabled,
   /// otherwise falls back to extractive summarization.
+  ///
+  /// For long inputs exceeding [AppConstants.maxChunkCharLength], a two-stage
+  /// map-reduce strategy is used:
+  /// 1. Map: The text is split into sentence-aligned chunks, and each chunk is
+  ///    summarized individually to extract key points.
+  /// 2. Reduce: The intermediate summaries are combined and summarized into the
+  ///    final requested [bulletCount] concise bullet points.
   Future<SummaryResult> summarizeAsync(
     String text, {
     int bulletCount = AppConstants.defaultBulletCount,
@@ -96,24 +149,37 @@ class SummarizerService {
           apiKey: apiKey,
         );
 
-        final prompt =
-            'Summarize the following text into exactly $bulletCount concise bullet points. '
-            'Only output the bullet points, starting each with a hyphen. Do not include introductory text.\n\n$text';
+        // Check if text exceeds chunk threshold for map-reduce
+        final chunks = _chunkText(text);
 
+        String textToSummarize;
+        if (chunks.length > 1) {
+          final intermediateSummaries = StringBuffer();
+          for (final chunk in chunks) {
+            final chunkPrompt = AppConstants.buildChunkSummaryPrompt(chunk);
+            final chunkResponse = await model
+                .generateContent([Content.text(chunkPrompt)])
+                .timeout(AppConstants.geminiTimeout);
+
+            if (chunkResponse.text != null && chunkResponse.text!.trim().isNotEmpty) {
+              intermediateSummaries.writeln(chunkResponse.text!.trim());
+            }
+          }
+          textToSummarize = intermediateSummaries.toString().trim();
+          if (textToSummarize.isEmpty) {
+            textToSummarize = text;
+          }
+        } else {
+          textToSummarize = text;
+        }
+
+        final prompt = AppConstants.buildSummaryPrompt(textToSummarize, bulletCount);
         final response = await model
             .generateContent([Content.text(prompt)])
             .timeout(AppConstants.geminiTimeout);
 
         if (response.text != null && response.text!.trim().isNotEmpty) {
-          // Parse the hyphenated list into a string array
-          final bullets = response.text!
-              .split('\n')
-              .map((line) => line.trim())
-              .where((line) => line.startsWith('-'))
-              .map((line) => line.substring(1).trim()) // Remove hyphen
-              .where((line) => line.isNotEmpty)
-              .toList();
-
+          final bullets = _parseBullets(response.text!);
           if (bullets.isNotEmpty) {
             return SummaryResult(bullets: bullets, usedFallback: false);
           }
