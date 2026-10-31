@@ -21,16 +21,41 @@ class SummaryResult {
   });
 }
 
+/// Interface for Gemini API text generation client, enabling dependency injection and mocking.
+abstract class GeminiClient {
+  Future<String?> generateContent(String prompt);
+}
+
+/// Default production implementation of [GeminiClient] using [GenerativeModel] from google_generative_ai.
+class GoogleGenerativeAiClient implements GeminiClient {
+  final GenerativeModel _model;
+
+  GoogleGenerativeAiClient({
+    required String apiKey,
+    String model = AppConstants.geminiModel,
+  }) : _model = GenerativeModel(model: model, apiKey: apiKey);
+
+  @override
+  Future<String?> generateContent(String prompt) async {
+    final response = await _model.generateContent([Content.text(prompt)]);
+    return response.text;
+  }
+}
+
 /// Extractive text summarization engine and Generative AI wrapper.
 /// Scores sentences by word frequency (excluding stopwords) and returns
 /// the top 3–5 most important sentences as bullet points, or uses Gemini API.
 class SummarizerService {
   final SharedPreferences? prefs;
+  final GeminiClient? geminiClient;
 
-  SummarizerService({this.prefs});
+  SummarizerService({this.prefs, this.geminiClient});
 
   /// Check if AI is configured and enabled.
   bool get isAiEnabled {
+    if (geminiClient != null) {
+      return prefs?.getBool(AppConstants.keyUseAiSummarization) ?? true;
+    }
     final apiKey = prefs?.getString(AppConstants.keyGeminiApiKey);
     final useAi = prefs?.getBool(AppConstants.keyUseAiSummarization) ?? false;
     return apiKey != null && apiKey.isNotEmpty && useAi;
@@ -143,11 +168,11 @@ class SummarizerService {
   }) async {
     if (isAiEnabled) {
       try {
-        final apiKey = prefs!.getString(AppConstants.keyGeminiApiKey)!;
-        final model = GenerativeModel(
-          model: AppConstants.geminiModel,
-          apiKey: apiKey,
-        );
+        final client = geminiClient ??
+            GoogleGenerativeAiClient(
+              apiKey: prefs!.getString(AppConstants.keyGeminiApiKey)!,
+              model: AppConstants.geminiModel,
+            );
 
         // Check if text exceeds chunk threshold for map-reduce
         final chunks = _chunkText(text);
@@ -157,12 +182,12 @@ class SummarizerService {
           final intermediateSummaries = StringBuffer();
           for (final chunk in chunks) {
             final chunkPrompt = AppConstants.buildChunkSummaryPrompt(chunk);
-            final chunkResponse = await model
-                .generateContent([Content.text(chunkPrompt)])
+            final chunkResponseText = await client
+                .generateContent(chunkPrompt)
                 .timeout(AppConstants.geminiTimeout);
 
-            if (chunkResponse.text != null && chunkResponse.text!.trim().isNotEmpty) {
-              intermediateSummaries.writeln(chunkResponse.text!.trim());
+            if (chunkResponseText != null && chunkResponseText.trim().isNotEmpty) {
+              intermediateSummaries.writeln(chunkResponseText.trim());
             }
           }
           textToSummarize = intermediateSummaries.toString().trim();
@@ -174,12 +199,12 @@ class SummarizerService {
         }
 
         final prompt = AppConstants.buildSummaryPrompt(textToSummarize, bulletCount);
-        final response = await model
-            .generateContent([Content.text(prompt)])
+        final responseText = await client
+            .generateContent(prompt)
             .timeout(AppConstants.geminiTimeout);
 
-        if (response.text != null && response.text!.trim().isNotEmpty) {
-          final bullets = _parseBullets(response.text!);
+        if (responseText != null && responseText.trim().isNotEmpty) {
+          final bullets = _parseBullets(responseText);
           if (bullets.isNotEmpty) {
             return SummaryResult(bullets: bullets, usedFallback: false);
           }
