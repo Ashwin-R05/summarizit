@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
@@ -27,11 +28,8 @@ class FileExportService {
     );
   }
 
-  /// Exports the given [bullets] as a DOCX file and shares it.
-  ///
-  /// DOCX = ZIP archive containing XML files that follow the
-  /// Office Open XML standard. We build a minimal valid document.
-  Future<void> exportAsDocx(List<String> bullets) async {
+  /// Generates the in-memory Open XML ZIP [Archive] for the DOCX document.
+  Archive buildDocxArchive(List<String> bullets) {
     // Build bullet paragraphs XML
     final paragraphs = StringBuffer();
     // Title paragraph
@@ -112,25 +110,35 @@ class FileExportService {
   </w:num>
 </w:numbering>''';
 
-    // Build the ZIP archive
     final archive = Archive();
     archive.addFile(
-      ArchiveFile.bytes('[Content_Types].xml', Uint8List.fromList(contentTypesXml.codeUnits)),
+      ArchiveFile.bytes('[Content_Types].xml', Uint8List.fromList(utf8.encode(contentTypesXml))),
     );
     archive.addFile(
-      ArchiveFile.bytes('_rels/.rels', Uint8List.fromList(relsXml.codeUnits)),
+      ArchiveFile.bytes('_rels/.rels', Uint8List.fromList(utf8.encode(relsXml))),
     );
     archive.addFile(
-      ArchiveFile.bytes('word/document.xml', Uint8List.fromList(documentXml.codeUnits)),
+      ArchiveFile.bytes('word/document.xml', Uint8List.fromList(utf8.encode(documentXml))),
     );
     archive.addFile(
-      ArchiveFile.bytes('word/_rels/document.xml.rels', Uint8List.fromList(wordRelsXml.codeUnits)),
+      ArchiveFile.bytes('word/_rels/document.xml.rels', Uint8List.fromList(utf8.encode(wordRelsXml))),
     );
     archive.addFile(
-      ArchiveFile.bytes('word/numbering.xml', Uint8List.fromList(numberingXml.codeUnits)),
+      ArchiveFile.bytes('word/numbering.xml', Uint8List.fromList(utf8.encode(numberingXml))),
     );
 
-    final zipData = ZipEncoder().encode(archive);
+    return archive;
+  }
+
+  /// Encodes the DOCX document for [bullets] into a ZIP byte array.
+  List<int> generateDocxBytes(List<String> bullets) {
+    final archive = buildDocxArchive(bullets);
+    return ZipEncoder().encode(archive);
+  }
+
+  /// Exports the given [bullets] as a DOCX file and shares it.
+  Future<void> exportAsDocx(List<String> bullets) async {
+    final zipData = generateDocxBytes(bullets);
 
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/summary.docx');

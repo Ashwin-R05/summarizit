@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:summarizit/utils/constants.dart';
@@ -60,6 +61,23 @@ class SummarizerService {
     final useAi = prefs?.getBool(AppConstants.keyUseAiSummarization) ?? false;
     return apiKey != null && apiKey.isNotEmpty && useAi;
   }
+
+  /// Exposed for testing stopword filtering.
+  @visibleForTesting
+  static Set<String> get stopwords => _stopwords;
+
+  /// Exposed for testing sentence tokenization.
+  @visibleForTesting
+  List<String> tokenizeSentences(String text) => _tokenizeSentences(text);
+
+  /// Exposed for testing word extraction.
+  @visibleForTesting
+  List<String> extractWords(String text) => _extractWords(text);
+
+  /// Exposed for testing text chunking.
+  @visibleForTesting
+  List<String> chunkText(String text, {int maxChunkLength = AppConstants.maxChunkCharLength}) =>
+      _chunkText(text, maxChunkLength: maxChunkLength);
   /// English stopwords to ignore when scoring.
   static const Set<String> _stopwords = {
     'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you',
