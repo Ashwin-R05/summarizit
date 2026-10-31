@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:summarizit/services/summarizer_service.dart';
@@ -235,4 +236,44 @@ void main() {
       expect(result.bullets[2], equals('Third synthesized point'));
     });
   });
+
+  group('SummarizerService — API Key Handling & Secure Storage', () {
+    test('Stores and retrieves API key with FlutterSecureStorage', () async {
+      FlutterSecureStorage.setMockInitialValues({
+        AppConstants.keyGeminiApiKey: 'secret-secure-key-12345',
+      });
+      const secureStorage = FlutterSecureStorage();
+      final service = SummarizerService(secureStorage: secureStorage);
+
+      final key = await service.getApiKey();
+      expect(key, equals('secret-secure-key-12345'));
+
+      await service.saveApiKey('updated-secret-key-99999');
+      final updatedKey = await service.getApiKey();
+      expect(updatedKey, equals('updated-secret-key-99999'));
+    });
+
+    test('Migrates legacy unencrypted API key from SharedPreferences to FlutterSecureStorage', () async {
+      FlutterSecureStorage.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        AppConstants.keyGeminiApiKey: 'legacy-shared-prefs-key',
+      });
+
+      const secureStorage = FlutterSecureStorage();
+      final prefs = await SharedPreferences.getInstance();
+      final service = SummarizerService(prefs: prefs, secureStorage: secureStorage);
+
+      // Retrieving the key should migrate it
+      final key = await service.getApiKey();
+      expect(key, equals('legacy-shared-prefs-key'));
+
+      // SharedPreferences should no longer hold the key
+      expect(prefs.containsKey(AppConstants.keyGeminiApiKey), isFalse);
+
+      // Secure storage should now hold the key
+      final secureKey = await secureStorage.read(key: AppConstants.keyGeminiApiKey);
+      expect(secureKey, equals('legacy-shared-prefs-key'));
+    });
+  });
 }
+

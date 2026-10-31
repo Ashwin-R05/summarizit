@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:summarizit/utils/constants.dart';
@@ -49,17 +50,60 @@ class GoogleGenerativeAiClient implements GeminiClient {
 class SummarizerService {
   final SharedPreferences? prefs;
   final GeminiClient? geminiClient;
+  final FlutterSecureStorage secureStorage;
 
-  SummarizerService({this.prefs, this.geminiClient});
+  SummarizerService({
+    this.prefs,
+    this.geminiClient,
+    FlutterSecureStorage? secureStorage,
+  }) : secureStorage = secureStorage ?? const FlutterSecureStorage();
+
+  /// Retrieve the Gemini API key securely from [FlutterSecureStorage],
+  /// automatically migrating any legacy SharedPreferences value if found.
+  Future<String?> getApiKey() async {
+    try {
+      final secureKey = await secureStorage.read(key: AppConstants.keyGeminiApiKey);
+      if (secureKey != null && secureKey.isNotEmpty) {
+        return secureKey;
+      }
+    } catch (_) {
+      // Secure storage read failed or not supported in test environment
+    }
+
+    // Check for legacy unencrypted key in SharedPreferences
+    final legacyKey = prefs?.getString(AppConstants.keyGeminiApiKey);
+    if (legacyKey != null && legacyKey.isNotEmpty) {
+      try {
+        await secureStorage.write(key: AppConstants.keyGeminiApiKey, value: legacyKey);
+      } catch (_) {}
+      await prefs?.remove(AppConstants.keyGeminiApiKey);
+      return legacyKey;
+    }
+
+    return null;
+  }
+
+  /// Save the Gemini API key securely into [FlutterSecureStorage].
+  Future<void> saveApiKey(String apiKey) async {
+    if (apiKey.isEmpty) {
+      try {
+        await secureStorage.delete(key: AppConstants.keyGeminiApiKey);
+      } catch (_) {}
+    } else {
+      try {
+        await secureStorage.write(key: AppConstants.keyGeminiApiKey, value: apiKey);
+      } catch (_) {}
+    }
+    // Clean up any legacy key from SharedPreferences
+    await prefs?.remove(AppConstants.keyGeminiApiKey);
+  }
 
   /// Check if AI is configured and enabled.
   bool get isAiEnabled {
     if (geminiClient != null) {
       return prefs?.getBool(AppConstants.keyUseAiSummarization) ?? true;
     }
-    final apiKey = prefs?.getString(AppConstants.keyGeminiApiKey);
-    final useAi = prefs?.getBool(AppConstants.keyUseAiSummarization) ?? false;
-    return apiKey != null && apiKey.isNotEmpty && useAi;
+    return prefs?.getBool(AppConstants.keyUseAiSummarization) ?? false;
   }
 
   /// Exposed for testing stopword filtering.
@@ -186,11 +230,23 @@ class SummarizerService {
   }) async {
     if (isAiEnabled) {
       try {
-        final client = geminiClient ??
-            GoogleGenerativeAiClient(
-              apiKey: prefs!.getString(AppConstants.keyGeminiApiKey)!,
-              model: AppConstants.geminiModel,
+        final GeminiClient client;
+        if (geminiClient != null) {
+          client = geminiClient!;
+        } else {
+          final apiKey = await getApiKey();
+          if (apiKey == null || apiKey.isEmpty) {
+            return SummaryResult(
+              bullets: summarize(text, bulletCount: bulletCount),
+              usedFallback: true,
+              notice: AppConstants.fallbackNotice,
             );
+          }
+          client = GoogleGenerativeAiClient(
+            apiKey: apiKey,
+            model: AppConstants.geminiModel,
+          );
+        }
 
         // Check if text exceeds chunk threshold for map-reduce
         final chunks = _chunkText(text);

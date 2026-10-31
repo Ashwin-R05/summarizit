@@ -132,11 +132,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _showSettingsDialog() {
-    final apiKeyController = TextEditingController(
-      text: widget.prefs.getString(AppConstants.keyGeminiApiKey) ?? '',
-    );
+  void _showSettingsDialog() async {
+    final storedKey = await _summarizer.getApiKey() ?? '';
+    if (!mounted) return;
+
+    final apiKeyController = TextEditingController(text: storedKey);
     bool useAi = widget.prefs.getBool(AppConstants.keyUseAiSummarization) ?? false;
+    bool obscureKey = true;
 
     showDialog(
       context: context,
@@ -161,12 +163,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   if (useAi)
                     TextField(
                       controller: apiKeyController,
+                      obscureText: obscureKey,
                       style: TextStyle(color: AppColors.text(_isDark)),
                       decoration: InputDecoration(
                         labelText: 'Gemini API Key',
                         labelStyle: TextStyle(color: AppColors.textSecondary(_isDark)),
                         hintText: 'Enter your API key',
                         hintStyle: TextStyle(color: AppColors.textSecondary(_isDark).withValues(alpha: 0.5)),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureKey ? Icons.visibility_off : Icons.visibility,
+                            color: AppColors.textSecondary(_isDark),
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              obscureKey = !obscureKey;
+                            });
+                          },
+                        ),
                       ),
                     ),
                 ],
@@ -177,10 +191,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary(_isDark))),
                 ),
                 TextButton(
-                  onPressed: () {
-                    widget.prefs.setString(AppConstants.keyGeminiApiKey, apiKeyController.text);
-                    widget.prefs.setBool(AppConstants.keyUseAiSummarization, useAi);
-                    Navigator.pop(context);
+                  onPressed: () async {
+                    final trimmedKey = apiKeyController.text.trim();
+                    await _summarizer.saveApiKey(trimmedKey);
+                    await widget.prefs.setBool(AppConstants.keyUseAiSummarization, useAi);
+                    await widget.prefs.remove(AppConstants.keyGeminiApiKey);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
                   },
                   child: Text('Save', style: TextStyle(color: AppColors.primaryPurple)),
                 ),

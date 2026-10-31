@@ -41,6 +41,7 @@ dependencies:
   image_picker: ^1.2.3
   google_mlkit_text_recognition: ^0.15.1
   shared_preferences: ^2.5.5
+  flutter_secure_storage: ^10.3.4
 
 dev_dependencies:
   flutter_test:
