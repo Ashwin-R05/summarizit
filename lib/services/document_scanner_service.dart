@@ -1,8 +1,11 @@
-import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart'; // for kIsWeb
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:summarizit/utils/constants.dart';
 
 class DocumentScannerService {
   final ImagePicker _imagePicker = ImagePicker();
@@ -27,20 +30,37 @@ class DocumentScannerService {
     }
   }
 
+  /// Picks a .txt file, validates its size, and returns its contents.
+  ///
+  /// Returns `null` if no file was selected, or an error description string
+  /// starting with "Error:" if the file exceeds the size limit.
   Future<String?> pickAndExtractTextFromFile() async {
     try {
       FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['txt'],
+        withData: kIsWeb,
       );
 
-      if (result != null && result.files.single.path != null) {
-        File file = File(result.files.single.path!);
-        return await file.readAsString();
+      if (result == null || result.files.isEmpty) return null;
+
+      final file = result.files.single;
+
+      // Guard against oversized files to prevent OOM.
+      if (file.size > AppConstants.maxFileBytes) {
+        final limitMB = AppConstants.maxFileBytes ~/ (1024 * 1024);
+        return 'Error: File is too large (${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB). '
+            'Maximum allowed size is $limitMB MB.';
+      }
+
+      // On web, path is null; use bytes instead.
+      if (kIsWeb && file.bytes != null) {
+        return utf8.decode(file.bytes!);
+      } else if (file.path != null) {
+        return await File(file.path!).readAsString();
       }
       return null;
     } catch (e) {
-      // Ignore in production
       return null;
     }
   }

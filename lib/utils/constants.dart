@@ -23,6 +23,9 @@ class AppConstants {
   /// Maximum character length per chunk for long input texts before chunking is triggered.
   static const int maxChunkCharLength = 4000;
 
+  /// Maximum file size (in bytes) allowed for text file ingestion (5 MB).
+  static const int maxFileBytes = 5 * 1024 * 1024;
+
   /// Builds the prompt for summarizing text into a specified number of bullet points.
   static String buildSummaryPrompt(String text, int bulletCount) {
     return 'Summarize the following text into exactly $bulletCount concise, informative bullet points.\n\n'
