@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>SummarizIt needs camera access to capture documents for text recognition.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SummarizIt needs photo library access to select document images for text recognition.</string>
 </dict>
 </plist>
