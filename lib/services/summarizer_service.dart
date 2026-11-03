@@ -278,6 +278,14 @@ class SummarizerService {
             .timeout(AppConstants.geminiTimeout);
 
         if (responseText != null && responseText.trim().isNotEmpty) {
+          // Validate output format to detect prompt injection manipulation
+          if (!AppConstants.isValidBulletOutput(responseText)) {
+            return SummaryResult(
+              bullets: summarize(text, bulletCount: bulletCount),
+              usedFallback: true,
+              notice: 'AI output was unexpected. Used offline summary instead.',
+            );
+          }
           final bullets = _parseBullets(responseText);
           if (bullets.isNotEmpty) {
             return SummaryResult(bullets: bullets, usedFallback: false);

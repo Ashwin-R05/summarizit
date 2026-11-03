@@ -98,6 +98,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _showSnack('Enter at least 30 words for a meaningful summary.');
       return;
     }
+    if (text.length > AppConstants.maxInputCharLength) {
+      _showSnack(
+          'Text is too long (${(text.length / 1000).toStringAsFixed(0)}K chars). '
+          'Maximum is ${AppConstants.maxInputCharLength ~/ 1000}K characters.');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
