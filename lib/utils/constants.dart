@@ -29,6 +29,15 @@ class AppConstants {
   /// Maximum character length allowed for text input (100,000 chars ≈ ~20,000 words).
   static const int maxInputCharLength = 100000;
 
+  /// Validates the format of a Google Gemini API key.
+  /// Standard keys begin with 'AIzaSy' and are 39 characters long, containing base64url-like chars.
+  static bool isValidGeminiApiKey(String apiKey) {
+    final trimmed = apiKey.trim();
+    if (trimmed.isEmpty) return false;
+    final regex = RegExp(r'^AIza[0-9A-Za-z-_]{35}$');
+    return regex.hasMatch(trimmed);
+  }
+
   /// Sanitizes user input to mitigate prompt injection attacks.
   ///
   /// Strips common instruction-override patterns, control characters, and

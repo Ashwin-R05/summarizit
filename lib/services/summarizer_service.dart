@@ -66,8 +66,8 @@ class SummarizerService {
       if (secureKey != null && secureKey.isNotEmpty) {
         return secureKey;
       }
-    } catch (_) {
-      // Secure storage read failed or not supported in test environment
+    } catch (e, st) {
+      debugPrint('SecureStorage read error: $e\n$st');
     }
 
     // Check for legacy unencrypted key in SharedPreferences
@@ -75,7 +75,9 @@ class SummarizerService {
     if (legacyKey != null && legacyKey.isNotEmpty) {
       try {
         await secureStorage.write(key: AppConstants.keyGeminiApiKey, value: legacyKey);
-      } catch (_) {}
+      } catch (e, st) {
+        debugPrint('SecureStorage write error during legacy migration: $e\n$st');
+      }
       await prefs?.remove(AppConstants.keyGeminiApiKey);
       return legacyKey;
     }
@@ -84,18 +86,33 @@ class SummarizerService {
   }
 
   /// Save the Gemini API key securely into [FlutterSecureStorage].
-  Future<void> saveApiKey(String apiKey) async {
-    if (apiKey.isEmpty) {
+  /// Validates format if non-empty. Returns `true` if saved or cleared successfully.
+  Future<bool> saveApiKey(String apiKey) async {
+    final trimmedKey = apiKey.trim();
+    if (trimmedKey.isEmpty) {
       try {
         await secureStorage.delete(key: AppConstants.keyGeminiApiKey);
-      } catch (_) {}
-    } else {
-      try {
-        await secureStorage.write(key: AppConstants.keyGeminiApiKey, value: apiKey);
-      } catch (_) {}
+      } catch (e, st) {
+        debugPrint('SecureStorage delete error: $e\n$st');
+      }
+      await prefs?.remove(AppConstants.keyGeminiApiKey);
+      return true;
+    }
+
+    if (!AppConstants.isValidGeminiApiKey(trimmedKey)) {
+      debugPrint('Validation failed: invalid Gemini API key format');
+      return false;
+    }
+
+    try {
+      await secureStorage.write(key: AppConstants.keyGeminiApiKey, value: trimmedKey);
+    } catch (e, st) {
+      debugPrint('SecureStorage write error: $e\n$st');
+      return false;
     }
     // Clean up any legacy key from SharedPreferences
     await prefs?.remove(AppConstants.keyGeminiApiKey);
+    return true;
   }
 
   /// Check if AI is configured and enabled.
@@ -298,7 +315,8 @@ class SummarizerService {
           usedFallback: true,
           notice: AppConstants.fallbackNotice,
         );
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('Gemini summarization failed, falling back to extractive: $e\n$st');
         // Fall back to extractive summarization on error or timeout
         return SummaryResult(
           bullets: summarize(text, bulletCount: bulletCount),

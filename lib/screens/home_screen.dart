@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:summarizit/services/summarizer_service.dart';
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<String> _bullets = [];
   bool _isLoading = false;
   bool _showResult = false;
+  DateTime? _lastSummarizeCall;
 
   late AnimationController _resultAnimController;
   late Animation<double> _resultFadeAnim;
@@ -89,6 +91,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int get _charCount => _textController.text.length;
 
   void _onSummarize() async {
+    if (_isLoading) return;
+
+    final now = DateTime.now();
+    if (_lastSummarizeCall != null &&
+        now.difference(_lastSummarizeCall!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastSummarizeCall = now;
+
     final text = _textController.text.trim();
     if (text.isEmpty) {
       _showSnack('Please paste or type some text first.');
@@ -199,7 +210,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 TextButton(
                   onPressed: () async {
                     final trimmedKey = apiKeyController.text.trim();
-                    await _summarizer.saveApiKey(trimmedKey);
+                    if (useAi && trimmedKey.isNotEmpty && !AppConstants.isValidGeminiApiKey(trimmedKey)) {
+                      _showSnack('Invalid Gemini API key format (expected AIza...)');
+                      return;
+                    }
+                    final saved = await _summarizer.saveApiKey(trimmedKey);
+                    if (!saved && trimmedKey.isNotEmpty) {
+                      _showSnack('Failed to save API key securely.');
+                      return;
+                    }
                     await widget.prefs.setBool(AppConstants.keyUseAiSummarization, useAi);
                     await widget.prefs.remove(AppConstants.keyGeminiApiKey);
                     if (context.mounted) {
@@ -522,6 +541,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             controller: _textController,
             maxLines: 10,
             minLines: 6,
+            maxLength: AppConstants.maxInputCharLength,
+            buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
             onChanged: (_) => setState(() {}),
             style: TextStyle(
               color: AppColors.text(dark).withValues(alpha: 0.9),
@@ -572,6 +593,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 IconButton(
                   icon: Icon(Icons.image, color: AppColors.textSecondary(dark), size: 20),
                   onPressed: () async {
+                     if (kIsWeb) {
+                       _showSnack('OCR from image is not supported on Web.');
+                       return;
+                     }
                      final text = await _scannerService.pickAndExtractTextFromImage(ImageSource.gallery);
                      if (text != null && text.isNotEmpty) {
                        setState(() {

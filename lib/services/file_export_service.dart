@@ -19,13 +19,21 @@ class FileExportService {
     }
 
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/summary.txt');
+    final file = File('${dir.path}/summary_${DateTime.now().millisecondsSinceEpoch}.txt');
     await file.writeAsString(buffer.toString());
 
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      subject: 'SummarizIt Summary',
-    );
+    try {
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'SummarizIt Summary',
+      );
+    } finally {
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+    }
   }
 
   /// Generates the in-memory Open XML ZIP [Archive] for the DOCX document.
@@ -141,13 +149,21 @@ class FileExportService {
     final zipData = generateDocxBytes(bullets);
 
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/summary.docx');
+    final file = File('${dir.path}/summary_${DateTime.now().millisecondsSinceEpoch}.docx');
     await file.writeAsBytes(zipData);
 
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      subject: 'SummarizIt Summary',
-    );
+    try {
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'SummarizIt Summary',
+      );
+    } finally {
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+    }
   }
 
   String _escapeXml(String input) {

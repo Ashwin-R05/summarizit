@@ -13,19 +13,18 @@ class DocumentScannerService {
 
   Future<String?> pickAndExtractTextFromImage(ImageSource source) async {
     try {
+      if (kIsWeb) {
+        return null;
+      }
+
       final XFile? image = await _imagePicker.pickImage(source: source);
       if (image == null) return null;
-
-      // Google ML Kit doesn't support web natively via this plugin, fallback to simple placeholder or avoid calling
-      if (kIsWeb) {
-         return "OCR is currently not supported on Web in this demo.";
-      }
 
       final inputImage = InputImage.fromFilePath(image.path);
       final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
       return recognizedText.text;
-    } catch (e) {
-      // ignore
+    } catch (e, st) {
+      debugPrint('Error picking or recognizing text from image: $e\n$st');
       return null;
     }
   }
@@ -60,7 +59,8 @@ class DocumentScannerService {
         return await File(file.path!).readAsString();
       }
       return null;
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('Error picking or reading text file: $e\n$st');
       return null;
     }
   }
