@@ -5,3 +5,4 @@
 
 # Keep google_generative_ai model classes
 -keep class com.google.ai.** { *; }
+
